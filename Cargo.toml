@@ -11,3 +11,4 @@ handlebars = { version = "3.5.0", features = ["dir_source"]}
 serde_json = "1.0.58"
 serde = "1.0.116"
 anyhow = "1.0.32"
+clap = "3.0.0-beta.2"

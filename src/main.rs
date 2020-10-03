@@ -1,9 +1,10 @@
-use std::{env, fs, process};
 use std::fs::DirEntry;
 use std::io::Write;
 use std::path::Path;
+use std::{fs, process};
 
 use anyhow::{Context, Error, Result};
+use clap::{Clap, crate_version};
 use handlebars::Handlebars;
 use hocon::{Hocon, HoconLoader};
 use serde_json::{Number, Value};
@@ -65,15 +66,12 @@ fn render<F: Fn(&String) -> Result<()>>(ctx: TemplateContext, out: F) -> Result<
     })?;
 
     if Path::is_dir(&ctx.input_path.as_ref()) {
+        if ctx.debug {
+            println!("Input path {:?} is a directory", ctx.input_path);
+        }
         render_files(&ctx, &params, &handlebars, out)
     } else if Path::is_file(&ctx.input_path.as_ref()) {
-        render_file(
-            &handlebars,
-            &ctx.input_path.as_str(),
-            &params,
-            &ctx.template_extension,
-        )
-            .and_then(|o| out(&o))
+        render_file(&handlebars, &ctx.input_path.as_str(), &params, &ctx).and_then(|o| out(&o))
     } else {
         Err(Error::msg(format!(
             "Cannot read input file/folder '{:?}'",
@@ -93,13 +91,22 @@ fn render_files<F: Fn(&String) -> Result<()>>(
             .map(|e| included(&e, &ctx.template_extension))
             .unwrap_or(false)
     });
+    if ctx.debug {
+        println!(
+            "Available templates: {:?}",
+            handlebars.get_templates().keys()
+        );
+    }
     for file in filtered {
         let f = file?.file_name();
+        if ctx.debug {
+            println!("rendering file: {:?}", &f);
+        }
         let file_name = f
             .to_str()
             .ok_or(format!("Failed to read file name: {:?}", f))
             .map_err(Error::msg);
-        let _ = render_file(&handlebars, &file_name?, &params, &ctx.template_extension)
+        let _ = render_file(&handlebars, &file_name?, &params, &ctx)
             .map(|o| out(&o).and_then(|_| out(&"\n".to_string())))?;
     }
     Ok(())
@@ -109,18 +116,16 @@ fn render_file(
     handlebars: &Handlebars<'static>,
     file_path: &str,
     params: &Value,
-    file_extension: &str,
+    ctx: &TemplateContext,
 ) -> Result<String> {
-    let template = file_path.trim_end_matches(file_extension);
-    handlebars
-        .render(template, &params)
-        .with_context(|| {
-            let templates = handlebars.get_templates().keys();
-            format!(
-                "Failed to render template: {}\nwith params:\n'{}'.\n\nAvailable templates: {:?}",
-                template, params, templates
-            )
-        })
+    let template = file_path.trim_end_matches(ctx.template_extension);
+    handlebars.render(template, &params).with_context(|| {
+        let templates = handlebars.get_templates().keys();
+        format!(
+            "Failed to render template: {}\nwith params:\n'{}'.\n\nAvailable templates: {:?}",
+            template, params, templates
+        )
+    })
 }
 
 fn included(entry: &DirEntry, file_extension: &str) -> bool {
@@ -131,34 +136,55 @@ fn included(entry: &DirEntry, file_extension: &str) -> bool {
         .unwrap_or_else(|| false)
 }
 
+#[derive(Debug, Clone)]
 struct TemplateContext {
     params_file: String,
     input_path: String,
     template_extension: &'static str,
+    debug: bool,
 }
 
-const DEFAULT_PARAMS: &str = "params.conf";
-const DEFAULT_INPUT_PATH: &str = "./templates/";
-const DEFAULT_TEMPLATE_EXTENSION: &str = ".yaml";
+#[derive(Clap)]
+#[clap(
+    author = "Alexey Novakov",
+    about = "Command line tool to render 'Handlebars' templates with values from 'HOCON' file.",
+    version = crate_version!()
+)]
+struct Opts {
+    #[clap(short, long)]
+    params: Option<String>,
+    #[clap(short, long, default_value = "./templates/")]
+    templates: String,
+    #[clap(short, long, default_value = ".yaml")]
+    extension: String,
+    #[clap(short)]
+    debug: bool,
+}
+
+fn to_static_str(s: String) -> &'static str {
+    Box::leak(s.into_boxed_str())
+}
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    let default_input_path = &String::from(DEFAULT_INPUT_PATH);
-    let input_path = args.get(1).unwrap_or(default_input_path);
-    let default_params_file = &DEFAULT_PARAMS.to_string();
-    let params_file = args.get(2).unwrap_or(default_params_file);
+    let opts: Opts = Opts::parse();
     let ctx = TemplateContext {
-        params_file: params_file.to_string(),
-        input_path: input_path.to_string(),
-        template_extension: DEFAULT_TEMPLATE_EXTENSION,
+        params_file: opts
+            .params
+            .unwrap_or(format!("{}/params.conf", opts.templates)),
+        input_path: opts.templates,
+        template_extension: to_static_str(opts.extension.clone()),
+        debug: opts.debug,
     };
-    let out = |s: &String| {
+    if ctx.debug {
+        println!("{:?}", ctx.clone());
+    }
+    let to_stdout = |s: &String| {
         std::io::stdout()
             .write(s.as_bytes())
             .map(|_| ())
             .with_context(|| "Failed to write to std out")
     };
-    match render(ctx, out) {
+    match render(ctx, to_stdout) {
         Ok(_) => (),
         Err(e) => {
             eprintln!("{:?}", e);
