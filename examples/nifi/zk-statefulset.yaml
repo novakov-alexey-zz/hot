@@ -1,0 +1,125 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:  
+  labels:
+    app: zookeeper
+    release: nifi
+    app.kubernetes.io/managed-by: Kubefi
+  name: {{ name }}-zookeeper
+spec:
+  podManagementPolicy: OrderedReady
+  replicas: {{ replicas }}
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: zookeeper
+      release: nifi
+  serviceName: {{ name }}-zookeeper-headless
+  template:
+    metadata:      
+      labels:
+        app: zookeeper
+        release: nifi
+        app.kubernetes.io/managed-by: Kubefi
+    spec:
+      containers:
+      - command:
+        - /bin/bash
+        - -xec
+        - /config-scripts/run
+        env:
+        - name: ZK_REPLICAS
+          value: "1"
+        - name: JMXAUTH
+          value: "false"
+        - name: JMXDISABLE
+          value: "false"
+        - name: JMXPORT
+          value: "1099"
+        - name: JMXSSL
+          value: "false"
+        - name: ZK_SYNC_LIMIT
+          value: "20"
+        - name: ZK_TICK_TIME
+          value: "4000"
+        - name: ZOO_AUTOPURGE_PURGEINTERVAL
+          value: "0"
+        - name: ZOO_AUTOPURGE_SNAPRETAINCOUNT
+          value: "3"
+        - name: ZOO_INIT_LIMIT
+          value: "5"
+        - name: ZOO_MAX_CLIENT_CNXNS
+          value: "60"
+        - name: ZOO_PORT
+          value: "2181"
+        - name: ZOO_STANDALONE_ENABLED
+          value: "false"
+        - name: ZOO_TICK_TIME
+          value: "4000"
+        image: {{ zkImage }}
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - /config-scripts/ok
+          failureThreshold: 2
+          initialDelaySeconds: 20
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 5
+        name: zookeeper
+        ports:
+        - containerPort: 2181
+          name: client
+          protocol: TCP
+        - containerPort: 3888
+          name: election
+          protocol: TCP
+        - containerPort: 2888
+          name: server
+          protocol: TCP
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - /config-scripts/ready
+          failureThreshold: 2
+          initialDelaySeconds: 20
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 5
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /data
+          name: data
+        - mountPath: /config-scripts
+          name: config
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+      terminationGracePeriodSeconds: 1800
+      volumes:
+      - configMap:
+          defaultMode: 365
+          name: {{ name }}-zookeeper
+        name: config
+  updateStrategy:
+    type: RollingUpdate
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      dataSource: null
+      resources:
+        requests:
+          storage: 5Gi
+      storageClassName: {{ storageClass }}
+      volumeMode: Filesystem    

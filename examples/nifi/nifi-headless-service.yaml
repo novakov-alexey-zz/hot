@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: nifi
+    app.kubernetes.io/managed-by: Kubefi
+    release: nifi
+  name: {{ name }}-headless
+spec:
+  clusterIP: None
+  ports:{{#if protocol.isSecure}}
+    - name: https
+      port: {{protocol.httpsPort}}
+      protocol: TCP
+      targetPort: {{protocol.httpsPort}}
+    - name: cluster
+      port: {{protocol.secureClusterPort}}
+      protocol: TCP
+      targetPort: {{protocol.secureClusterPort}}{{else}}
+    - name: http
+      port: {{protocol.httpPort}}
+      protocol: TCP
+      targetPort: {{protocol.httpPort}}
+    - name: cluster
+      port: {{protocol.clusterPort}}
+      protocol: TCP
+      targetPort: {{protocol.clusterPort}}{{/if}}
+  selector:
+    app: nifi
+    release: nifi
+  sessionAffinity: None
+  type: ClusterIP

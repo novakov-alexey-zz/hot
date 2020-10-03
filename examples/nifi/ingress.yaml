@@ -1,0 +1,29 @@
+{{# if ingress.enabled }}
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: {{ ingress.ingressClass }}{{# if (eq ingress.ingressClass "nginx") }}
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    nginx.ingress.kubernetes.io/secure-backends: "true"
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "route"
+    nginx.ingress.kubernetes.io/session-cookie-expires: "172800"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"{{/if}}
+  labels:
+    app: nifi
+    release: nifi
+    app.kubernetes.io/managed-by: Kubefi
+  name: {{ name }}-ingress
+spec:
+  rules:
+  - host: {{ ingress.host }}
+    http:
+      paths:
+      - backend:
+          serviceName: {{ name }}
+          servicePort: {{#if protocol.isSecure}}443{{else}}80{{/if}}
+        path: /
+{{/if}}

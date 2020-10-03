@@ -1,0 +1,410 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:    
+  labels:
+    app: nifi
+    release: nifi
+    app.kubernetes.io/managed-by: Kubefi
+  name: {{ name }}
+spec:
+  podManagementPolicy: Parallel
+  replicas: {{ replicas }}
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: nifi
+      release: nifi
+  serviceName: {{ name }}-headless
+  template:
+    metadata:
+      annotations:        
+        security.alpha.kubernetes.io/sysctls: net.ipv4.ip_local_port_range=10000 65000      
+      labels:
+        app: nifi
+        release: nifi
+        app.kubernetes.io/managed-by: Kubefi
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: component
+                  operator: In
+                  values:
+                  - nifi
+              topologyKey: kubernetes.io/hostname
+            weight: 1
+      containers:
+      - command:
+        - bash
+        - -ce
+        - |
+          prop_replace () {
+            target_file=${NIFI_HOME}/conf/${3:-nifi.properties}
+            echo "updating ${1} in ${target_file}"
+            if egrep "^${1}=" ${target_file} &> /dev/null; then
+              sed -i -e "s|^$1=.*$|$1=$2|"  ${target_file}
+            else
+              echo ${1}=${2} >> ${target_file}
+            fi
+          }
+
+          FQDN=$(hostname -f)
+
+          cat "${NIFI_HOME}/conf/nifi.temp" > "${NIFI_HOME}/conf/nifi.properties"
+
+          if [[ $(grep $(hostname) conf/authorizers.temp) ]]; then
+            cat "${NIFI_HOME}/conf/authorizers.temp" > "${NIFI_HOME}/conf/authorizers.xml"
+          else
+            cat "${NIFI_HOME}/conf/authorizers.empty" > "${NIFI_HOME}/conf/authorizers.xml"
+          fi
+
+          prop_replace nifi.remote.input.host ${FQDN}
+          prop_replace nifi.cluster.node.address ${FQDN}
+          {{#if protocol.httpsPort}}prop_replace nifi.web.https.host ${FQDN}{{else}}prop_replace nifi.web.http.host ${FQDN}{{/if}}
+          prop_replace nifi.zookeeper.connect.string ${NIFI_ZOOKEEPER_CONNECT_STRING}
+          prop_replace nifi.kerberos.krb5.file "/etc/krb5.conf" nifi.properties
+
+          exec bin/nifi.sh run
+        env:
+        - name: NIFI_ZOOKEEPER_CONNECT_STRING
+          value: {{ name }}-zookeeper:2181
+        image: {{ image }}
+        imagePullPolicy: IfNotPresent
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - bash
+              - -c
+              - |
+                $NIFI_HOME/bin/nifi.sh stop
+        livenessProbe:
+          failureThreshold: 3
+          initialDelaySeconds: 90
+          periodSeconds: 60
+          successThreshold: 1
+          tcpSocket:
+            port: {{#if protocol.isSecure}}{{protocol.httpsPort}}{{else}}{{protocol.httpPort}}{{/if}}
+          timeoutSeconds: 1
+        name: server
+        ports:{{#if protocol.isSecure}}
+        - containerPort: {{protocol.httpsPort}}
+          name: https
+          protocol: TCP
+        - containerPort: {{protocol.secureClusterPort}}
+          name: cluster
+          protocol: TCP{{else}}
+        - containerPort: {{protocol.httpPort}}
+          name: http
+          protocol: TCP
+        - containerPort: {{protocol.clusterPort}}
+          name: cluster
+          protocol: TCP{{/if}}{{#if ne protocol.isSecure}}
+        readinessProbe:
+          exec:
+            command:
+            - bash
+            - -c
+            - |
+              curl -kv \
+                http://$(hostname -f):{{protocol.httpPort}}/nifi-api/controller/cluster > $NIFI_BASE_DIR/data/cluster.state
+              STATUS=$(jq -r ".cluster.nodes[] | select((.address==\"$(hostname -f)\") or .address==\"localhost\") | .status" $NIFI_BASE_DIR/data/cluster.state)
+
+              if [[ ! $STATUS = "CONNECTED" ]]; then
+                echo "Node not found with CONNECTED state. Full cluster state:"
+                jq . $NIFI_BASE_DIR/data/cluster.state
+                exit 1
+              fi
+          failureThreshold: 3
+          initialDelaySeconds: 60
+          periodSeconds: 20
+          successThreshold: 1
+          timeoutSeconds: 1 {{/if}}
+        resources: {{#if nifiResources.requests}} 
+          requests: {{#if nifiResources.requests.cpu}}
+            cpu: {{nifiResources.requests.cpu}}{{/if}}
+            memory: {{#if nifiResources.requests.memory}}{{nifiResources.requests.memory}}{{/if}}{{/if}}{{#if nifiResources.limits}}
+          limits: 
+            cpu:{{#if nifiResources.limits.cpu}}{{nifiResources.limits.cpu}}{{/if}}{{#if nifiResources.limits.memory}}
+            memory:{{nifiResources.limits.memory}}{{/if}}{{/if}}{{#if (not (or nifiResources.requests nifiResources.limits))}}{}{{/if}} 
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /opt/nifi/data
+          name: data
+        - mountPath: /opt/nifi/flowfile_repository
+          name: flowfile-repository
+        - mountPath: /opt/nifi/content_repository
+          name: content-repository
+        - mountPath: /opt/nifi/provenance_repository
+          name: provenance-repository
+        - mountPath: /opt/nifi/nifi-current/logs
+          name: logs
+        - mountPath: /opt/nifi/nifi-current/conf/bootstrap.conf
+          name: bootstrap-conf
+          subPath: bootstrap.conf
+        - mountPath: /opt/nifi/nifi-current/conf/nifi.temp
+          name: nifi-properties
+          subPath: nifi.temp
+        - mountPath: /opt/nifi/nifi-current/conf/authorizers.temp
+          name: authorizers-temp
+          subPath: authorizers.temp
+        - mountPath: /opt/nifi/nifi-current/conf/authorizers.empty
+          name: authorizers-empty
+          subPath: authorizers.empty
+        - mountPath: /opt/nifi/nifi-current/conf/bootstrap-notification-services.xml
+          name: bootstrap-notification-services-xml
+          subPath: bootstrap-notification-services.xml
+        - mountPath: /opt/nifi/nifi-current/conf/logback.xml
+          name: logback-xml
+          subPath: logback.xml
+        - mountPath: /opt/nifi/nifi-current/conf/login-identity-providers.xml
+          name: login-identity-providers-xml
+          subPath: login-identity-providers.xml
+        - mountPath: /opt/nifi/nifi-current/conf/state-management.xml
+          name: state-management-xml
+          subPath: state-management.xml
+        - mountPath: /opt/nifi/nifi-current/conf/zookeeper.properties
+          name: zookeeper-properties
+          subPath: zookeeper.properties
+        {{#if protocol.isSecure}}
+        - mountPath: /opt/nifi/nifi-current/conf/keystore.jks
+          name: nifi-tls-jks
+          subPath: keystore.jks
+        - mountPath: /opt/nifi/nifi-current/conf/truststore.jks
+          name: nifi-tls-jks
+          subPath: truststore.jks
+        {{/if}}
+        {{# if kerberos.enabled }}
+        - mountPath: /opt/nifi/secret/nifi.keytab
+          name: nifi-service-keytab
+          readOnly: true
+          subPath: nifi.keytab
+        - mountPath: /etc/krb5.conf
+          name: nifi-krb5-conf
+          readOnly: true
+          subPath: krb5.conf
+        {{/if}}
+      - args:
+        - tail
+        - -n+1
+        - -F
+        - /var/log/nifi-app.log
+        image: ez123/alpine-tini
+        imagePullPolicy: Always
+        name: app-log
+        resources:
+          limits:
+            cpu: 50m
+            memory: 50Mi
+          requests:
+            cpu: 10m
+            memory: 10Mi
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /var/log
+          name: logs
+      - args:
+        - tail
+        - -n+1
+        - -F
+        - /var/log/nifi-bootstrap.log
+        image: ez123/alpine-tini
+        imagePullPolicy: Always
+        name: bootstrap-log
+        resources:
+          limits:
+            cpu: 50m
+            memory: 50Mi
+          requests:
+            cpu: 10m
+            memory: 10Mi
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /var/log
+          name: logs
+      - args:
+        - tail
+        - -n+1
+        - -F
+        - /var/log/nifi-user.log
+        image: ez123/alpine-tini
+        imagePullPolicy: Always
+        name: user-log
+        resources:
+          limits:
+            cpu: 50m
+            memory: 50Mi
+          requests:
+            cpu: 10m
+            memory: 10Mi
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /var/log
+          name: logs
+      dnsPolicy: ClusterFirst
+      imagePullSecrets:
+      - name: regcred
+      initContainers:
+      - command:
+        - sh
+        - -c
+        - |
+          echo trying to contact {{ name }}-zookeeper 2181
+          until nc -vzw 1 {{ name }}-zookeeper 2181; do
+            echo "waiting for zookeeper..."
+            sleep 2
+          done
+        image: busybox
+        imagePullPolicy: Always
+        name: zookeeper
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - configMap:
+          defaultMode: 420
+          items:
+          - key: bootstrap.conf
+            path: bootstrap.conf
+          name: {{ name }}-config
+        name: bootstrap-conf
+      - configMap:
+          defaultMode: 420
+          items:
+          - key: nifi.properties
+            path: nifi.temp
+          name: {{ name }}-config
+        name: nifi-properties
+      - configMap:
+          defaultMode: 420
+          items:
+          - key: authorizers.xml
+            path: authorizers.temp
+          name: {{ name }}-config
+        name: authorizers-temp
+      - configMap:
+          defaultMode: 420
+          items:
+          - key: authorizers-empty.xml
+            path: authorizers.empty
+          name: {{ name }}-config
+        name: authorizers-empty
+      - configMap:
+          defaultMode: 420
+          items:
+          - key: bootstrap-notification-services.xml
+            path: bootstrap-notification-services.xml
+          name: {{ name }}-config
+        name: bootstrap-notification-services-xml
+      - configMap:
+          defaultMode: 420
+          items:
+          - key: logback.xml
+            path: logback.xml
+          name: {{ logging-configmap }}
+        name: logback-xml
+      - configMap:
+          defaultMode: 420
+          items:
+          - key: login-identity-providers.xml
+            path: login-identity-providers.xml
+          name: {{ name }}-config
+        name: login-identity-providers-xml
+      - configMap:
+          defaultMode: 420
+          items:
+          - key: state-management.xml
+            path: state-management.xml
+          name: {{ name }}-config
+        name: state-management-xml
+      - configMap:
+          defaultMode: 420
+          items:
+          - key: zookeeper.properties
+            path: zookeeper.properties
+          name: {{ name }}-config
+        name: zookeeper-properties
+      {{#if protocol.isSecure}}
+      - name: nifi-tls-jks
+        secret:
+          defaultMode: 420
+          secretName: {{ protocol.security.jksSecret }}
+      {{/if}}
+      {{# if kerberos.enabled }}
+      - name: nifi-service-keytab
+        secret:
+          defaultMode: 420
+          secretName: nifi-service-keytab
+      - configMap:
+          defaultMode: 420
+          name: krb5-conf
+        name: nifi-krb5-conf
+      {{/if}}
+  updateStrategy:
+    rollingUpdate:
+      partition: 0
+    type: RollingUpdate
+  volumeClaimTemplates:
+  - metadata:      
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce      
+      resources:
+        requests:
+          storage: 1Gi
+      storageClassName: {{ storageClass }}
+      volumeMode: Filesystem    
+  - metadata:
+      name: flowfile-repository
+    spec:
+      accessModes:
+      - ReadWriteOnce      
+      resources:
+        requests:
+          storage: 10Gi
+      storageClassName: {{ storageClass }}
+      volumeMode: Filesystem    
+  - metadata:      
+      name: content-repository
+    spec:
+      accessModes:
+      - ReadWriteOnce      
+      resources:
+        requests:
+          storage: 10Gi
+      storageClassName: {{ storageClass }}
+      volumeMode: Filesystem    
+  - metadata:      
+      name: provenance-repository
+    spec:
+      accessModes:
+      - ReadWriteOnce      
+      resources:
+        requests:
+          storage: 10Gi
+      storageClassName: {{ storageClass }}
+      volumeMode: Filesystem    
+  - metadata:      
+      name: logs
+    spec:
+      accessModes:
+      - ReadWriteOnce      
+      resources:
+        requests:
+          storage: 5Gi
+      storageClassName: {{ storageClass }}
+      volumeMode: Filesystem 

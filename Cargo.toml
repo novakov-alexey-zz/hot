@@ -1,0 +1,13 @@
+[package]
+name = "ht"
+description = "Human Optimized Templates"
+version = "0.1.0"
+authors = ["Alexey Novakov <novakov.alex@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+hocon = "0.3.5"
+handlebars = { version = "3.5.0", features = ["dir_source"]}
+serde_json = "1.0.58"
+serde = "1.0.116"
+anyhow = "1.0.32"
