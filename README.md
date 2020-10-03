@@ -1,4 +1,5 @@
 # Human Optimized Templates
+![Build](https://github.com/novakov-alexey/hot/workflows/Build/badge.svg)
 
 Command line tool to render Handlebars templates with values from HOCON file.
 
