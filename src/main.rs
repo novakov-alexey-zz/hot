@@ -151,13 +151,13 @@ struct TemplateContext {
     version = crate_version!()
 )]
 struct Opts {
-    #[clap(short, long)]
+    #[clap(short, long, about = "default is <templates>/params.conf")]
     params: Option<String>,
-    #[clap(short, long, default_value = "./templates/")]
+    #[clap(short, long, about = "path to a folder with templates or to single template file", default_value = "./templates/")]
     templates: String,
-    #[clap(short, long, default_value = ".yaml")]
+    #[clap(short, long, about = "file extension of the template(s)", default_value = ".yaml")]
     extension: String,
-    #[clap(short)]
+    #[clap(short, about = "Prints debug information")]
     debug: bool,
 }
 
