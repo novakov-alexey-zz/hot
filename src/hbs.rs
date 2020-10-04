@@ -65,6 +65,7 @@ fn render_files<F: Fn(&String) -> Result<()>>(
         }
     }
     let separator = format!("\n{}\n", ctx.separator);
+    let mut i = 0;
     for file in filtered {
         let f = file?.file_name();
         if ctx.debug {
@@ -75,7 +76,8 @@ fn render_files<F: Fn(&String) -> Result<()>>(
             .ok_or(format!("Failed to read file name: {:?}", f))
             .map_err(Error::msg);
         let _ = render_file(&handlebars, &file_name?, &params, &ctx)
-            .map(|o| out(&o).and_then(|_| out(&separator)))?;
+            .map(|o| out(&o).and_then(|_| if i > 0 { out(&separator) } else { Ok(()) }))?;
+        i += 1;
     }
     Ok(())
 }
