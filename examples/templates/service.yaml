@@ -6,5 +6,5 @@ spec:
   selector:
     app: myapp
   ports:
-  - port: {{ port }}
-    targetPort: {{ targetPort }}
+  - port: {{ service.port }}
+    targetPort: {{ service.targetPort }}

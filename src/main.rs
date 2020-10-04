@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate clap;
+
 use std::io::Write;
 use std::process;
 
@@ -9,13 +12,18 @@ use ht::TemplateContext;
 
 #[derive(Clap)]
 #[clap(
-author = "Alexey Novakov",
+author = crate_authors ! (),
 about = "Command line tool to render 'Handlebars' templates with values from 'HOCON' file.",
 version = crate_version ! ()
 )]
 struct Opts {
-    #[clap(short, long, about = "default is <templates>/params.conf")]
-    params: Option<String>,
+    #[clap(
+        short,
+        long,
+        about = "Can take multiple values. Default is <templates>/params.conf",
+        multiple = true
+    )]
+    params: Vec<String>,
     #[clap(
         short,
         long,
@@ -47,11 +55,16 @@ fn to_static_str(s: String) -> &'static str {
 
 fn main() {
     let opts: Opts = Opts::parse();
-    let ctx = TemplateContext {
-        params_file: opts.params.unwrap_or(format!(
+    let params = if opts.params.is_empty() {
+        vec![format!(
             "{}/params.conf",
             opts.templates.trim_end_matches('/')
-        )),
+        )]
+    } else {
+        opts.params
+    };
+    let ctx = TemplateContext {
+        params_file: params,
         input_path: opts.templates,
         template_extension: to_static_str(opts.extension.clone()),
         separator: opts.out_separator,

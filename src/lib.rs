@@ -1,6 +1,6 @@
 #[derive(Debug, Clone)]
 pub struct TemplateContext {
-    pub params_file: String,
+    pub params_file: Vec<String>,
     pub input_path: String,
     pub template_extension: &'static str,
     pub separator: String,

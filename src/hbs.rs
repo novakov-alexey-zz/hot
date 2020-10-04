@@ -6,7 +6,7 @@ use anyhow::{Context, Error, Result};
 use handlebars::Handlebars;
 use serde_json::Value;
 
-use crate::hocon::read_params;
+use crate::hocon::merge_params;
 use crate::TemplateContext;
 
 fn register_templates(
@@ -20,8 +20,12 @@ fn register_templates(
 }
 
 pub fn render<F: Fn(&String) -> Result<()>>(ctx: TemplateContext, out: F) -> Result<()> {
-    let params = read_params(ctx.params_file.as_str())
-        .with_context(|| format!("Failed to load parameters from '{}' file", &ctx.params_file))?;
+    let params = merge_params(ctx.params_file.clone()).with_context(|| {
+        format!(
+            "Failed to load parameters from '{:?}' file",
+            &ctx.params_file
+        )
+    })?;
     let extension = &ctx.template_extension;
     let handlebars = register_templates(&*extension, &*ctx.input_path).with_context(|| {
         format!(
@@ -74,8 +78,8 @@ fn render_files<F: Fn(&String) -> Result<()>>(
             .to_str()
             .ok_or(format!("Failed to read file name: {:?}", f))
             .map_err(Error::msg);
-        let _ = render_file(&handlebars, &file_name?, &params, &ctx)
-            .map(|o| out(&o).and_then(|_| if i > 0 { out(&separator) } else { Ok(()) }))?;
+        let _ = if i > 0 { out(&separator) } else { Ok(()) }
+            .and_then(|_| render_file(&handlebars, &file_name?, &params, &ctx).map(|o| out(&o)))?;
     }
     Ok(())
 }
