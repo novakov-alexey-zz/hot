@@ -20,16 +20,16 @@ jobs:
         include:
           - name: linux
             os: ubuntu-latest
-            artifact_name: hot
-            asset_name: hot-linux
+            artifact_name: ht
+            asset_name: ht-linux
           - name: windows
             os: windows-latest
-            artifact_name: hot.exe
-            asset_name: hot-windows
+            artifact_name: ht.exe
+            asset_name: ht-windows
           - name: macos
             os: macos-latest
-            artifact_name: hot
-            asset_name: hot-macos
+            artifact_name: ht
+            asset_name: ht-macos
 
     steps:
       - uses: actions/checkout@v1
