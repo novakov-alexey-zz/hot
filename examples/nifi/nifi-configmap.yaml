@@ -7,4 +7,3 @@ metadata:
     app.kubernetes.io/managed-by: Kubefi
   name: {{ name }}-config
 data:
-
