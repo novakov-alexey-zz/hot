@@ -65,8 +65,7 @@ fn render_files<F: Fn(&String) -> Result<()>>(
         }
     }
     let separator = format!("\n{}\n", ctx.separator);
-    let mut i = 0;
-    for file in filtered {
+    for (i, file) in filtered.enumerate() {
         let f = file?.file_name();
         if ctx.debug {
             println!("rendering file: {:?}", &f);
@@ -77,7 +76,6 @@ fn render_files<F: Fn(&String) -> Result<()>>(
             .map_err(Error::msg);
         let _ = render_file(&handlebars, &file_name?, &params, &ctx)
             .map(|o| out(&o).and_then(|_| if i > 0 { out(&separator) } else { Ok(()) }))?;
-        i += 1;
     }
     Ok(())
 }

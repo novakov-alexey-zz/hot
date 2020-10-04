@@ -48,9 +48,10 @@ fn to_static_str(s: String) -> &'static str {
 fn main() {
     let opts: Opts = Opts::parse();
     let ctx = TemplateContext {
-        params_file: opts
-            .params
-            .unwrap_or(format!("{}/params.conf", opts.templates)),
+        params_file: opts.params.unwrap_or(format!(
+            "{}/params.conf",
+            opts.templates.trim_end_matches('/')
+        )),
         input_path: opts.templates,
         template_extension: to_static_str(opts.extension.clone()),
         separator: opts.out_separator,
