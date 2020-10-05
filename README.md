@@ -11,16 +11,16 @@ Based on Rust crates:
 
 OSX:
 ```bash
-sudo curl -LJ https://github.com/novakov-alexey/hot/releases/download/v0.2.0/ht-macos > /usr/local/bin/ht && chmod +x /usr/local/bin/ht
+sudo curl -LJ https://github.com/novakov-alexey/hot/releases/download/v0.4.0/ht-macos > /usr/local/bin/ht && chmod +x /usr/local/bin/ht
 ```
 Linux:
 ```bash
-sudo curl -LJ https://github.com/novakov-alexey/hot/releases/download/v0.2.0/ht-linux > /usr/local/bin/ht && chmod +x /usr/local/bin/ht
+sudo curl -LJ https://github.com/novakov-alexey/hot/releases/download/v0.4.0/ht-linux > /usr/local/bin/ht && chmod +x /usr/local/bin/ht
 ```
 
 Windows:
 ```bash
-sudo curl -LJ https://github.com/novakov-alexey/hot/releases/download/v0.2.0/ht-windows > ht 
+sudo curl -LJ https://github.com/novakov-alexey/hot/releases/download/v0.4.0/ht-windows > ht 
 ```
 
 ## Usage
