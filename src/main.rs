@@ -1,51 +1,48 @@
-#[macro_use]
-extern crate clap;
-
 use std::io::Write;
 use std::process;
 
 use anyhow::Context;
-use clap::{crate_version, Clap};
+use clap::Parser;
 
 use ht::hbs::render;
 use ht::TemplateContext;
 
-#[derive(Clap)]
+#[derive(Parser)]
 #[clap(
-author = crate_authors ! (),
+author,
 about = "Command line tool to render 'Handlebars' templates with values from 'HOCON' file.",
-version = crate_version ! ()
+version
 )]
 struct Opts {
     #[clap(
         short,
         long,
-        about = "Can take multiple values. Default is <templates>/params.conf",
+        help = "Can take multiple values. Default is <templates>/params.conf",
         multiple = true
     )]
     params: Vec<String>,
     #[clap(
         short,
         long,
-        about = "path to a folder with templates or to single template file",
+        help = "path to a folder with templates or to single template file",
         default_value = "./templates/"
     )]
     templates: String,
     #[clap(
         short,
         long,
-        about = "file extension of the template(s)",
+        help = "file extension of the template(s)",
         default_value = ".yaml"
     )]
     extension: String,
     #[clap(
         short,
         long,
-        about = "text line value to be printed between templates",
+        help = "text line value to be printed between templates",
         default_value = "---"
     )]
     out_separator: String,
-    #[clap(short, about = "Prints debug information")]
+    #[clap(short, help = "Prints debug information")]
     debug: bool,
 }
 
